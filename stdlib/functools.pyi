@@ -3,7 +3,7 @@ import types
 from _typeshed import SupportsAllComparisons, SupportsItems
 from collections.abc import Callable, Hashable, Iterable, Sequence, Sized
 from typing import Any, Generic, Literal, NamedTuple, TypedDict, TypeVar, final, overload
-from typing_extensions import ParamSpec, Self, TypeAlias
+from typing_extensions import ParamSpec, Self, TypeAlias, Protocol
 
 if sys.version_info >= (3, 9):
     from types import GenericAlias
@@ -30,6 +30,8 @@ if sys.version_info >= (3, 9):
 _T = TypeVar("_T")
 _T_co = TypeVar("_T_co", covariant=True)
 _S = TypeVar("_S")
+_R = TypeVar("_R")
+_P = ParamSpec("_P")
 _PWrapped = ParamSpec("_PWrapped")
 _RWrapped = TypeVar("_RWrapped")
 _PWrapper = ParamSpec("_PWrapper")
@@ -51,22 +53,174 @@ if sys.version_info >= (3, 9):
         maxsize: int
         typed: bool
 
+
+
+class _Function(Protocol[_P, _R]):  # type: ignore[misc]  # pyright: ignore reportInvalidTypeVarUse
+    def __call__(self, *args: _P.args, **kwds: _P.kwargs) -> _R: ...
+
+class _Method(Protocol[_T, _P, _R]):  # type: ignore[misc]  # pyright: ignore reportInvalidTypeVarUse
+    def __call__(_self, self: _T, *args: _P.args, **kwds: _P.kwargs) -> _R: ...
+
+class _Classmethod(Protocol[_T, _P, _R]):  # type: ignore[misc]  # pyright: ignore reportInvalidTypeVarUse
+    def __call__(_self, cls: type[_T], *args: _P.args, **kwds: _P.kwargs) -> _R: ...
+
+_CacheFn: TypeAlias = _lru_cache_wrapper[_Function[_P, _R]]
+_CacheMethod: TypeAlias = _lru_cache_wrapper[_Method[_T, _P, _R]]
+_CacheClassmethod: TypeAlias = _lru_cache_wrapper[_Classmethod[_T, _P, _R]]
+# _HCacheClassmethod: TypeAlias = _lru_cache_wrapper[_Classmethod[_T, _P, _R]]
+# _CacheHashable: TypeAlias = _lru_cache_wrapper[Callable[..., _R]]
+_C = TypeVar("_C", bound=Callable[..., Any])
+_Mh = TypeVar("_Mh", Literal[True], Literal[False])
+
 @final
-class _lru_cache_wrapper(Generic[_T]):
-    __wrapped__: Callable[..., _T]
-    def __call__(self, *args: Hashable, **kwargs: Hashable) -> _T: ...
+class _lru_cache_wrapper(Generic[_C]):
+    __wrapped__: _C
+
+    # @overload
+    # def __call__(
+    #     _self: _HCacheClassmethod[_T, _P, _R],
+    #     cls: type[_T],
+    #     *args: _P.args,
+    #     **kwargs: _P.kwargs
+    # ) -> _R: ...
+    # @overload
+    # def __call__(
+    #     _self: _HCacheClassmethod[_T, _P, _R],
+    #     # cls: type[_T],
+    #     *args: Hashable,
+    #     **kwargs: Hashable
+    # ) -> _R: ...
+    # @overload
+    # def __call__(
+    #     _self: _CacheHashable[_R],
+    #     *args: Hashable,
+    #     **kwargs: Hashable
+    # ) -> _R: ...
+    @overload
+    def __call__(
+        _self: _CacheMethod[_T, _P, _R],
+        *args: _P.args,
+        **kwargs: _P.kwargs
+    ) -> _R: ...
+    @overload
+    def __call__(
+        _self: _CacheMethod[_T, _P, _R],
+        self: _T,
+        *args: _P.args,
+        **kwargs: _P.kwargs
+    ) -> _R: ...
+    @overload
+    def __call__(
+        _self: _CacheClassmethod[_T, _P, _R],
+        *args: _P.args,
+        **kwargs: _P.kwargs
+    ) -> _R: ...
+    @overload
+    def __call__(
+        _self: _CacheClassmethod[_T, _P, _R],
+        cls: type[_T],
+        *args: _P.args,
+        **kwargs: _P.kwargs
+    ) -> _R: ...
+    @overload
+    def __call__(
+        _self: _CacheFn[_P, _R],
+        *args: _P.args,
+        **kwargs: _P.kwargs
+    ) -> _R: ...
+
     def cache_info(self) -> _CacheInfo: ...
     def cache_clear(self) -> None: ...
     if sys.version_info >= (3, 9):
         def cache_parameters(self) -> _CacheParameters: ...
 
-    def __copy__(self) -> _lru_cache_wrapper[_T]: ...
-    def __deepcopy__(self, memo: Any, /) -> _lru_cache_wrapper[_T]: ...
+    def __copy__(self) -> Self: ...
+    def __deepcopy__(self, memo: Any, /) -> Self: ...
+
+
+
+# _CacheFn: TypeAlias = _lru_cache_wrapper[_Function[_P, _R], Literal[False]]
+# _CacheMethod: TypeAlias = _lru_cache_wrapper[_Method[_T, _P, _R], Literal[False]]
+# _CacheClassmethod: TypeAlias = _lru_cache_wrapper[_Classmethod[_T, _P, _R], Literal[False]]
+# _HCacheClassmethod: TypeAlias = _lru_cache_wrapper[_Classmethod[_T, _P, _R], Literal[True]]
+# _CacheHashable: TypeAlias = _lru_cache_wrapper[Callable[..., _R], Literal[True]]
+# _C = TypeVar("_C", bound=Callable[..., Any])
+# _Mh = TypeVar("_Mh", Literal[True], Literal[False])
+
+
+# @final
+# class _lru_cache_wrapper(Generic[_C, _Mh]):
+#     __wrapped__: _C
+
+#     @overload
+#     def __call__(
+#         _self: _HCacheClassmethod[_T, _P, _R],
+#         cls: type[_T],
+#         *args: _P.args,
+#         **kwargs: _P.kwargs
+#     ) -> _R: ...
+#     # @overload
+#     # def __call__(
+#     #     _self: _HCacheClassmethod[_T, _P, _R],
+#     #     # cls: type[_T],
+#     #     *args: Hashable,
+#     #     **kwargs: Hashable
+#     # ) -> _R: ...
+#     @overload
+#     def __call__(
+#         _self: _CacheHashable[_R],
+#         *args: Hashable,
+#         **kwargs: Hashable
+#     ) -> _R: ...
+#     @overload
+#     def __call__(
+#         _self: _CacheMethod[_T, _P, _R],
+#         *args: _P.args,
+#         **kwargs: _P.kwargs
+#     ) -> _R: ...
+#     @overload
+#     def __call__(
+#         _self: _CacheMethod[_T, _P, _R],
+#         self: _T,
+#         *args: _P.args,
+#         **kwargs: _P.kwargs
+#     ) -> _R: ...
+#     @overload
+#     def __call__(
+#         _self: _CacheClassmethod[_T, _P, _R],
+#         *args: _P.args,
+#         **kwargs: _P.kwargs
+#     ) -> _R: ...
+#     @overload
+#     def __call__(
+#         _self: _CacheClassmethod[_T, _P, _R],
+#         cls: type[_T],
+#         *args: _P.args,
+#         **kwargs: _P.kwargs
+#     ) -> _R: ...
+#     @overload
+#     def __call__(
+#         _self: _CacheFn[_P, _R],
+#         *args: _P.args,
+#         **kwargs: _P.kwargs
+#     ) -> _R: ...
+
+#     def cache_info(self) -> _CacheInfo: ...
+#     def cache_clear(self) -> None: ...
+#     if sys.version_info >= (3, 9):
+#         def cache_parameters(self) -> _CacheParameters: ...
+
+#     def __copy__(self) -> Self: ...
+#     def __deepcopy__(self, memo: Any, /) -> Self: ...
+
+# _LruRet: TypeAlias = _lru_cache_wrapper[_C, Literal[True]] | _lru_cache_wrapper[_C, Literal[False]]
+# _LruRet: TypeAlias = _lru_cache_wrapper[_C, Literal[False]]
+_LruRet: TypeAlias = _lru_cache_wrapper[_C, Literal[True]]
 
 @overload
-def lru_cache(maxsize: int | None = 128, typed: bool = False) -> Callable[[Callable[..., _T]], _lru_cache_wrapper[_T]]: ...
+def lru_cache(maxsize: int | None = 128, typed: bool = False) -> Callable[[_C], _LruRet[_C]]: ...
 @overload
-def lru_cache(maxsize: Callable[..., _T], typed: bool = False) -> _lru_cache_wrapper[_T]: ...
+def lru_cache(maxsize: _C, typed: bool = False) -> _LruRet[_C]: ...
 
 if sys.version_info >= (3, 12):
     WRAPPER_ASSIGNMENTS: tuple[
@@ -199,7 +353,8 @@ class cached_property(Generic[_T_co]):
         def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
 
 if sys.version_info >= (3, 9):
-    def cache(user_function: Callable[..., _T], /) -> _lru_cache_wrapper[_T]: ...
+    # def cache(user_function: _C, /) -> _lru_cache_wrapper[_C, Literal[True]] | _lru_cache_wrapper[_C, Literal[False]]: ...
+    def cache(user_function: _C, /) -> _LruRet[_C]: ...
 
 def _make_key(
     args: tuple[Hashable, ...],
